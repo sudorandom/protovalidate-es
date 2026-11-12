@@ -16,7 +16,6 @@ import * as assert from "node:assert/strict";
 import { suite, test } from "node:test";
 import {
   AnyRulesSchema,
-  RuleSchema,
   EnumRulesSchema,
   file_buf_validate_validate,
   MapRulesSchema,
@@ -131,7 +130,7 @@ void suite("EvalMany", () => {
     const a = new EvalTest(false);
     const b = new EvalTest(false);
     const m = new EvalMany<string>(a, b);
-    m.eval("", Cursor.create(RuleSchema, false));
+    m.eval("", Cursor.create(false));
     assert.equal(a.evaluated, true);
     assert.equal(b.evaluated, true);
   });
@@ -140,14 +139,14 @@ void suite("EvalMany", () => {
       const a = new EvalTest(true);
       const m = new EvalMany<string>(a, EvalNoop.get());
       assert.strictEqual(m.prune(), true);
-      m.eval("", Cursor.create(RuleSchema, false));
+      m.eval("", Cursor.create(false));
       assert.equal(a.evaluated, false);
     });
     void test("keeps ops", () => {
       const a = new EvalTest(false);
       const m = new EvalMany<string>(a);
       assert.strictEqual(m.prune(), false);
-      m.eval("", Cursor.create(RuleSchema, false));
+      m.eval("", Cursor.create(false));
       assert.equal(a.evaluated, true);
     });
   });

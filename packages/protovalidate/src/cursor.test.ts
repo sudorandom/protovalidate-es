@@ -15,24 +15,27 @@
 import * as assert from "node:assert";
 import { suite, test } from "node:test";
 import { Cursor } from "./cursor.js";
-import { RuleSchema } from "./gen/buf/validate/validate_pb.js";
+import {
+  FieldRulesSchema,
+  RuleSchema,
+} from "./gen/buf/validate/validate_pb.js";
 import { ValidationError } from "./error.js";
 
 void suite("Cursor", () => {
   void test("create()", () => {
-    const cursor = Cursor.create(RuleSchema, false);
+    const cursor = Cursor.create(false);
     assert.equal(cursor.getPath().length, 0);
     assert.equal(cursor.violated, false);
   });
   void suite("violate()", () => {
     void test("sets violated = true", () => {
-      const cursor = Cursor.create(RuleSchema, false);
+      const cursor = Cursor.create(false);
       assert.equal(cursor.violated, false);
       cursor.violate("msg", "rule-id", []);
       assert.equal(cursor.violated, true);
     });
     void test("failFast=true throws on call", () => {
-      const cursor = Cursor.create(RuleSchema, true);
+      const cursor = Cursor.create(true);
       assert.throws(() => cursor.violate("msg-1", "id-1", []), {
         name: "ValidationError",
         message: "msg-1 [id-1]",
@@ -41,7 +44,7 @@ void suite("Cursor", () => {
   });
   void suite("throwIfViolated()", () => {
     void test("throws if violated", () => {
-      const cursor = Cursor.create(RuleSchema, false);
+      const cursor = Cursor.create(false);
       cursor.violate("msg-1", "id-1", []);
       assert.equal(cursor.violated, true);
       assert.throws(() => cursor.throwIfViolated(), {
@@ -50,7 +53,7 @@ void suite("Cursor", () => {
       });
     });
     void test("throws all violations", () => {
-      const cursor = Cursor.create(RuleSchema, false);
+      const cursor = Cursor.create(false);
       cursor.violate("msg-1", "id-1", []);
       cursor.violate("msg-2", "id-2", []);
       assert.equal(cursor.violated, true);
@@ -65,17 +68,41 @@ void suite("Cursor", () => {
       }
     });
     void test("does not throw if not violated", () => {
-      const cursor = Cursor.create(RuleSchema, false);
+      const cursor = Cursor.create(false);
       assert.equal(cursor.violated, false);
       cursor.throwIfViolated();
       assert.ok(true);
     });
   });
   void test("field() clones", () => {
-    const root = Cursor.create(RuleSchema, false);
+    const root = Cursor.create(false);
     const cursor = root.field(RuleSchema.field.message);
     assert.notStrictEqual(root, cursor);
     assert.equal(root.getPath().length, 0);
     assert.equal(cursor.getPath().length, 1);
+  });
+  void test("violate() records the path from the root", () => {
+    const cursor = Cursor.create(false);
+    cursor
+      .field(FieldRulesSchema.field.cel)
+      .list(1)
+      .field(RuleSchema.field.id)
+      .violate("msg", "id", []);
+    cursor.mapKey("k").violate("msg", "id", [], true);
+    try {
+      cursor.throwIfViolated();
+      assert.fail("expected error");
+    } catch (e) {
+      assert.ok(e instanceof ValidationError);
+      assert.deepStrictEqual(e.violations[0].field, [
+        FieldRulesSchema.field.cel,
+        { kind: "list_sub", index: 1 },
+        RuleSchema.field.id,
+      ]);
+      assert.deepStrictEqual(e.violations[1].field, [
+        { kind: "map_sub", key: "k" },
+      ]);
+      assert.equal(e.violations[1].forKey, true);
+    }
   });
 });

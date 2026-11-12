@@ -255,7 +255,7 @@ function validateUnsafe(
   }
   const plan = planner.plan(schema);
   const msg = reflect(schema, message);
-  const cursor = Cursor.create(schema, failFast, maxViolations);
+  const cursor = Cursor.create(failFast, maxViolations);
   try {
     plan.eval(msg, cursor);
   } finally {
