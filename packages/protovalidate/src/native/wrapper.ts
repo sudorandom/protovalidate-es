@@ -29,7 +29,7 @@ import type { Eval } from "../eval.js";
 export class WrappedValueEval implements Eval<ReflectMessage> {
   constructor(
     private readonly valueField: DescField,
-    private readonly inner: Eval<ScalarValue>,
+    readonly inner: Eval<ScalarValue>,
   ) {}
 
   eval(val: ReflectMessage, cursor: Cursor): void {

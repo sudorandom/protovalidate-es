@@ -63,6 +63,7 @@ import {
   EvalOneofRequired,
   EvalField,
   EvalMessageOneofRule,
+  EvalWrapperField,
 } from "./eval.js";
 import {
   getEnumRules,
@@ -209,7 +210,9 @@ export class Planner {
       switch (field.fieldKind) {
         case "message": {
           evals.add(
-            new EvalField(
+            new (isWrapperDesc(field.message) && field.oneof === undefined
+              ? EvalWrapperField
+              : EvalField)(
               field,
               required,
               legacyRequired,

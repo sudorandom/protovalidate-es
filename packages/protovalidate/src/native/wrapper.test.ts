@@ -54,6 +54,75 @@ void suite("native wrapper rules", () => {
     assertRuleIdOrder(s, create(s, { v: 5 }), [expr, "int32.gt"]);
   });
 
+  void test("every wrapper type", () => {
+    const s = compile(
+      `message M {
+        google.protobuf.DoubleValue d = 1 [(buf.validate.field).double.gt = 10];
+        google.protobuf.FloatValue f = 2 [(buf.validate.field).float.gt = 10];
+        google.protobuf.Int64Value i64 = 3 [(buf.validate.field).int64.gt = 10];
+        google.protobuf.UInt64Value u64 = 4 [(buf.validate.field).uint64.gt = 10];
+        google.protobuf.Int32Value i32 = 5 [(buf.validate.field).int32.gt = 10];
+        google.protobuf.UInt32Value u32 = 6 [(buf.validate.field).uint32.gt = 10];
+        google.protobuf.BoolValue b = 7 [(buf.validate.field).bool.const = true];
+        google.protobuf.StringValue s = 8 [(buf.validate.field).string.const = "a"];
+        google.protobuf.BytesValue bs = 9 [(buf.validate.field).bytes.len = 1];
+      }`,
+    );
+    diff(s, create(s));
+    diff(
+      s,
+      create(s, {
+        d: 11,
+        f: 11,
+        i64: 11n,
+        u64: 11n,
+        i32: 11,
+        u32: 11,
+        b: true,
+        s: "a",
+        bs: new Uint8Array(1),
+      }),
+    );
+    diff(
+      s,
+      create(s, {
+        d: 1,
+        f: 1,
+        i64: 1n,
+        u64: 1n,
+        i32: 1,
+        u32: 1,
+        b: false,
+        s: "b",
+        bs: new Uint8Array(2),
+      }),
+    );
+  });
+
+  void test("required wrapper", () => {
+    const s = compile(
+      `message M {
+        google.protobuf.Int32Value v = 1 [(buf.validate.field) = { required: true, int32: {gt: 10} }];
+      }`,
+    );
+    assertRuleIdOrder(s, create(s), ["required"]);
+    assertRuleIdOrder(s, create(s, { v: 5 }), ["int32.gt"]);
+    assertRuleIdOrder(s, create(s, { v: 50 }), []);
+  });
+
+  void test("wrapper in a oneof", () => {
+    const s = compile(
+      `message M {
+        oneof o {
+          google.protobuf.Int32Value v = 1 [(buf.validate.field).int32.gt = 10];
+        }
+      }`,
+    );
+    // Wrapper fields in a oneof are not unboxed in protobuf-es.
+    diff(s, create(s, { o: { case: "v", value: { value: 5 } } }));
+    diff(s, create(s, { o: { case: "v", value: { value: 50 } } }));
+  });
+
   void test("repeated items: standard and custom rules each report once", () => {
     const s = compile(
       `message M {

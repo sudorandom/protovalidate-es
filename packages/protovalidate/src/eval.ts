@@ -31,6 +31,7 @@ import {
 } from "./gen/buf/validate/validate_pb.js";
 import type { Cursor } from "./cursor.js";
 import type { Condition } from "./condition.js";
+import { WrappedValueEval } from "./native/wrapper.js";
 
 /**
  * Evaluate rules for a value.
@@ -201,11 +202,11 @@ export class EvalMapEntries<V extends ReflectMessageGet>
  */
 export class EvalField<F extends DescField> implements Eval<ReflectMessage> {
   constructor(
-    private readonly field: F,
-    private readonly required: boolean,
-    private readonly legacyRequired: boolean,
+    protected readonly field: F,
+    protected readonly required: boolean,
+    protected readonly legacyRequired: boolean,
     private readonly condition: Condition<ReflectMessage>,
-    private pass: Eval<ReflectMessageGet<F>>,
+    protected pass: Eval<ReflectMessageGet<F>>,
   ) {}
   eval(val: ReflectMessage, cursor: Cursor): void {
     if (this.required || this.legacyRequired) {
@@ -238,6 +239,36 @@ export class EvalField<F extends DescField> implements Eval<ReflectMessage> {
       !this.required &&
       !this.legacyRequired
     );
+  }
+}
+
+/** Evaluate a singular wrapper field by passing its value to the rules. */
+export class EvalWrapperField extends EvalField<
+  DescField & { fieldKind: "message" }
+> {
+  private unwrapped: Eval<ScalarValue> | undefined;
+  override eval(val: ReflectMessage, cursor: Cursor): void {
+    if (this.unwrapped === undefined) {
+      super.eval(val, cursor);
+      return;
+    }
+    const value = (val.message as Record<string, unknown>)[
+      this.field.localName
+    ];
+    if (value !== undefined) {
+      this.unwrapped.eval(value as ScalarValue, cursor.field(this.field));
+    }
+  }
+  override prune(): boolean {
+    const dead = super.prune();
+    if (
+      this.pass instanceof WrappedValueEval &&
+      !this.required &&
+      !this.legacyRequired
+    ) {
+      this.unwrapped = this.pass.inner;
+    }
+    return dead;
   }
 }
 
