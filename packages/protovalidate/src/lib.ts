@@ -530,7 +530,8 @@ export function isHostname(this: string): boolean {
       return false;
     }
     // for each character in part
-    for (const ch of part.split("")) {
+    for (let i = 0; i < l; i++) {
+      const ch = part[i];
       // if the character is not a-z, A-Z, 0-9, or '-', it is invalid
       if (
         (ch < "a" || ch > "z") &&
