@@ -46,10 +46,14 @@ import {
 import { CompilationError, RuntimeError } from "./error.js";
 import type { Eval } from "./eval.js";
 import type { Cursor } from "./cursor.js";
-import { getRuleScalarType } from "./rules.js";
+import { getRuleDescriptor, getRuleScalarType } from "./rules.js";
 import { createCustomFuncions, type RegexMatcher } from "./func.js";
 import { strings } from "@bufbuild/cel/ext";
-import { isReflectMessage } from "@bufbuild/protobuf/reflect";
+import {
+  isReflectMessage,
+  reflect,
+  type ReflectMessage,
+} from "@bufbuild/protobuf/reflect";
 
 type CelCompiledRules = {
   standard: {
@@ -287,12 +291,15 @@ export class EvalExtendedRulesCel implements Eval<ReflectMessageGet> {
 
   private readonly thisScalarType: ScalarType | undefined;
 
+  private readonly rules: ReflectMessage;
+
   constructor(
     private readonly celMan: CelManager,
-    private readonly rules: Exclude<FieldRules["type"]["value"], undefined>,
+    rules: Exclude<FieldRules["type"]["value"], undefined>,
     private readonly forMapKey: boolean,
   ) {
     this.thisScalarType = getRuleScalarType(rules);
+    this.rules = reflectRules(rules);
   }
 
   add(
@@ -333,12 +340,15 @@ export class EvalStandardRulesCel implements Eval<ReflectMessageGet> {
 
   private readonly thisScalarType: ScalarType | undefined;
 
+  private readonly rules: ReflectMessage;
+
   constructor(
     private readonly celMan: CelManager,
-    private readonly rules: Exclude<FieldRules["type"]["value"], undefined>,
+    rules: Exclude<FieldRules["type"]["value"], undefined>,
     private readonly forMapKey: boolean,
   ) {
     this.thisScalarType = getRuleScalarType(rules);
+    this.rules = reflectRules(rules);
   }
 
   add(compiled: CelCompiledRule, rulePath: Path): void {
@@ -360,6 +370,13 @@ export class EvalStandardRulesCel implements Eval<ReflectMessageGet> {
   prune(): boolean {
     return this.children.length == 0;
   }
+}
+
+// Convert the rules once; CEL would convert a Message on every access.
+function reflectRules(
+  rules: Exclude<FieldRules["type"]["value"], undefined>,
+): ReflectMessage {
+  return reflect(getRuleDescriptor(rules.$typeName), rules);
 }
 
 function reflectToCel(
