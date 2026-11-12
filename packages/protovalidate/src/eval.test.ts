@@ -150,5 +150,41 @@ void suite("EvalMany", () => {
       m.eval("", Cursor.create(RuleSchema, false));
       assert.equal(a.evaluated, true);
     });
+    void test("flattens nested EvalMany in order", () => {
+      const order: string[] = [];
+      const op = (name: string): Eval<string> => ({
+        eval: () => order.push(name),
+        prune: () => false,
+      });
+      const m = new EvalMany<string>(
+        op("a"),
+        new EvalMany(new EvalMany(op("b")), op("c"), new EvalMany()),
+        op("d"),
+      );
+      assert.strictEqual(m.prune(), false);
+      m.eval("", Cursor.create(RuleSchema, false));
+      assert.deepStrictEqual(order, ["a", "b", "c", "d"]);
+    });
+    void test("unwrap() returns a single child", () => {
+      const a = new EvalTest(false);
+      const b = new EvalTest(false);
+      assert.strictEqual(EvalMany.unwrap(new EvalMany<string>(a)), a);
+      assert.strictEqual(EvalMany.unwrap(a), a);
+      const many = new EvalMany<string>(a, b);
+      assert.strictEqual(EvalMany.unwrap(many), many);
+      const plan = EvalMany.plan<string>().add(a);
+      assert.strictEqual(EvalMany.unwrap(plan), plan, "plan being built");
+      plan.finish();
+      assert.strictEqual(EvalMany.unwrap(plan), a, "finished plan");
+    });
+    void test("prunes a cycle through a plan", () => {
+      const plan = EvalMany.plan<string>();
+      const a = new EvalTest(false);
+      plan.add(a, new EvalMany<string>(plan));
+      // Pruning does not descend into the plan that is being built.
+      plan.finish();
+      assert.strictEqual(plan.prune(), false);
+      assert.strictEqual(new EvalMany<string>(plan).prune(), false);
+    });
   });
 });

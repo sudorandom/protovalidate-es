@@ -84,6 +84,14 @@ export class EvalMany<T> implements Eval<T> {
     e.planState = "building";
     return e;
   }
+  /** Return the only child of a pruned EvalMany, or the evaluator itself. */
+  static unwrap<T>(e: Eval<T>): Eval<T> {
+    return e instanceof EvalMany &&
+      e.planState !== "building" &&
+      e.many.length == 1
+      ? e.many[0]
+      : e;
+  }
   add(...evals: Eval<T>[]): this {
     this.many.push(...evals);
     return this;
@@ -111,8 +119,20 @@ export class EvalMany<T> implements Eval<T> {
     return this.pruneMany();
   }
   private pruneMany(): boolean {
-    this.many = this.many.filter((e) => !e.prune());
-    return this.many.length == 0;
+    const many: Eval<T>[] = [];
+    for (const e of this.many) {
+      if (e.prune()) {
+        continue;
+      }
+      // Take over a nested EvalMany's children, unless it is being built.
+      if (e instanceof EvalMany && e.planState !== "building") {
+        many.push(...e.many);
+      } else {
+        many.push(e);
+      }
+    }
+    this.many = many;
+    return many.length == 0;
   }
 }
 
@@ -124,7 +144,7 @@ export class EvalListItems<T extends ReflectMessageGet>
 {
   constructor(
     private readonly condition: Condition<T>,
-    private readonly pass: Eval<T>,
+    private pass: Eval<T>,
   ) {}
   eval(val: ReflectList, cursor: Cursor): void {
     for (let i = 0; i < val.size; i++) {
@@ -135,7 +155,9 @@ export class EvalListItems<T extends ReflectMessageGet>
     }
   }
   prune(): boolean {
-    return this.pass.prune() || this.condition.never;
+    const passDead = this.pass.prune();
+    this.pass = EvalMany.unwrap(this.pass);
+    return passDead || this.condition.never;
   }
 }
 
@@ -168,6 +190,8 @@ export class EvalMapEntries<V extends ReflectMessageGet>
   prune(): boolean {
     const key = this.key.prune() || this.keyCondition.never;
     const value = this.value.prune() || this.valueCondition.never;
+    this.key = EvalMany.unwrap(this.key);
+    this.value = EvalMany.unwrap(this.value);
     return key && value;
   }
 }
@@ -181,7 +205,7 @@ export class EvalField<F extends DescField> implements Eval<ReflectMessage> {
     private readonly required: boolean,
     private readonly legacyRequired: boolean,
     private readonly condition: Condition<ReflectMessage>,
-    private readonly pass: Eval<ReflectMessageGet<F>>,
+    private pass: Eval<ReflectMessageGet<F>>,
   ) {}
   eval(val: ReflectMessage, cursor: Cursor): void {
     if (this.required || this.legacyRequired) {
@@ -208,6 +232,7 @@ export class EvalField<F extends DescField> implements Eval<ReflectMessage> {
   }
   prune(): boolean {
     const passDead = this.pass.prune();
+    this.pass = EvalMany.unwrap(this.pass);
     return (
       (this.condition.never || passDead) &&
       !this.required &&
