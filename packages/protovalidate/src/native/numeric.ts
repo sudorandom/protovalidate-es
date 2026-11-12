@@ -57,8 +57,10 @@ type NumericRulesDescs = {
   readonly gte: DescField;
   readonly lt: DescField;
   readonly lte: DescField;
-  readonly in: DescField;
-  readonly notIn: DescField;
+  /** Absent on TimestampRulesSchema. */
+  readonly in?: DescField;
+  /** Absent on TimestampRulesSchema. */
+  readonly notIn?: DescField;
   /** Only present on FloatRulesSchema and DoubleRulesSchema. */
   readonly finite?: DescField;
 };
@@ -68,7 +70,7 @@ type NumericRulesDescs = {
  *
  * `T` is `number` for 32-bit ints + float/double, `bigint` for 64-bit ints.
  */
-type NumericConfig<T extends number | bigint> = {
+export type NumericConfig<T extends number | bigint> = {
   readonly typeName: string;
   readonly descs: NumericRulesDescs;
   /** Format a value into the user-facing error string. */
@@ -176,6 +178,19 @@ type NumericRulesShape<T extends number | bigint> = Message<string> & {
    * for them, so the read is guarded either way.
    */
   finite?: boolean;
+};
+
+/**
+ * The rules the numeric evaluator applies, read from a rules message.
+ * `const` and `finite` are undefined when they are not set.
+ */
+export type RangeRules<T extends number | bigint> = {
+  const: T | undefined;
+  in: readonly T[];
+  notIn: readonly T[];
+  greaterThan: NumericRulesShape<T>["greaterThan"];
+  lessThan: NumericRulesShape<T>["lessThan"];
+  finite: boolean | undefined;
 };
 
 type ConstRule<T> = { readonly val: T; readonly path: Path };
@@ -353,11 +368,39 @@ function build<T extends number | bigint>(
   if (rules.$unknown && rules.$unknown.length > 0) {
     return undefined;
   }
+  const { finite } = config.descs;
+  return buildRange(
+    {
+      const: isFieldSet(rules, config.descs.const) ? rules.const : undefined,
+      in: rules.in,
+      notIn: rules.notIn,
+      greaterThan: rules.greaterThan,
+      lessThan: rules.lessThan,
+      finite:
+        finite !== undefined && isFieldSet(rules, finite)
+          ? rules.finite
+          : undefined,
+    },
+    config,
+    rulePath,
+    forMapKey,
+  );
+}
 
+/**
+ * Build a native evaluator for the given range rules. Returns `undefined`
+ * for rules that bail out (NaN bound, no rules set).
+ */
+export function buildRange<T extends number | bigint>(
+  rules: RangeRules<T>,
+  config: NumericConfig<T>,
+  rulePath: PathBuilder,
+  forMapKey: boolean,
+): ScalarNativeResult | undefined {
   const handled = new Set<DescField>();
 
   let constRule: ConstRule<T> | undefined;
-  if (isFieldSet(rules, config.descs.const)) {
+  if (rules.const !== undefined) {
     constRule = {
       val: rules.const,
       path: rulePath.clone().field(config.descs.const).toPath(),
@@ -366,7 +409,7 @@ function build<T extends number | bigint>(
   }
 
   let inRule: ListRule<T> | undefined;
-  if (rules.in.length > 0) {
+  if (config.descs.in !== undefined && rules.in.length > 0) {
     inRule = {
       vals: rules.in,
       path: rulePath.clone().field(config.descs.in).toPath(),
@@ -375,7 +418,7 @@ function build<T extends number | bigint>(
   }
 
   let notInRule: ListRule<T> | undefined;
-  if (rules.notIn.length > 0) {
+  if (config.descs.notIn !== undefined && rules.notIn.length > 0) {
     notInRule = {
       vals: rules.notIn,
       path: rulePath.clone().field(config.descs.notIn).toPath(),
@@ -412,7 +455,7 @@ function build<T extends number | bigint>(
   }
 
   let finitePath: Path | undefined;
-  if (config.descs.finite && isFieldSet(rules, config.descs.finite)) {
+  if (config.descs.finite !== undefined && rules.finite !== undefined) {
     if (rules.finite) {
       finitePath = rulePath.clone().field(config.descs.finite).toPath();
     }

@@ -52,6 +52,7 @@ import { tryBuildNativeMapRules } from "./map.js";
 import { tryBuildNativeNumericRules } from "./numeric.js";
 import { tryBuildNativeRepeatedRules } from "./repeated.js";
 import { tryBuildNativeStringRules } from "./string.js";
+import { tryBuildNativeTimeRules } from "./time.js";
 import { WrappedValueEval } from "./wrapper.js";
 
 /**
@@ -170,10 +171,11 @@ export function tryBuildNative(
       const r = tryBuildNativeNumericRules(rules, rulePath, forMapKey);
       return liftScalar(r, wrappedValueField);
     }
-    case AnyRulesSchema.typeName:
     case DurationRulesSchema.typeName:
-    case FieldMaskRulesSchema.typeName:
     case TimestampRulesSchema.typeName:
+      return tryBuildNativeTimeRules(rules, rulePath, forMapKey);
+    case AnyRulesSchema.typeName:
+    case FieldMaskRulesSchema.typeName:
       // No native handler for these yet; CEL evaluates them. Listed rather
       // than lumped into a `default` so the gap is visible, and so that a
       // rules message added to FieldRules upstream fails to compile here
